@@ -14,7 +14,7 @@ class SQ_Captcha{
 	 * @access private
 	 * @var string
 	 */
-	private $number = "023456789";
+	private $number = "0123456789";
 	
 	/**
 	 * Captcha image height

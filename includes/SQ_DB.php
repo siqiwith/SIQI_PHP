@@ -429,6 +429,86 @@ class SQ_DB{
 	}
 	
 	/**
+	 * Insert a row into a table.
+	 *
+	 * <code>
+	 * SQ_DB::insert( 'table', array( 'column' => 'foo', 'field' => 'bar' ) )
+	 * SQ_DB::insert( 'table', array( 'column' => 'foo', 'field' => 1337 ), array( '%s', '%d' ) )
+	 * </code>
+	 *
+	 * @see SQ_DB::prepare()
+	 * @see SQ_DB::$field_types
+	 * @see wp_set_wpdb_vars()
+	 *
+	 * @param string $table table name
+	 * @param array $data Data to insert (in column => value pairs). Both $data columns and $data values should be "raw" (neither should be SQL escaped).
+	 * @param array|string $format Optional. An array of formats to be mapped to each of the value in $data. If string, that format will be used for all of the values in $data.
+	 * 	A format is one of '%d', '%f', '%s' (integer, float, string). If omitted, all values in $data will be treated as strings unless otherwise specified in wpdb::$field_types.
+	 * @return int|false The number of rows inserted, or false on error.
+	 */
+	function insert( $table, $data, $format = null ) {
+		return $this->_insert_replace_helper( $table, $data, $format, 'INSERT' );
+	}
+	
+	/**
+	 * Replace a row into a table.
+	 *
+	 * <code>
+	 * SQ_DB::replace( 'table', array( 'column' => 'foo', 'field' => 'bar' ) )
+	 * SQ_DB::replace( 'table', array( 'column' => 'foo', 'field' => 1337 ), array( '%s', '%d' ) )
+	 * </code>
+	 *
+	 * @see SQ_DB::prepare()
+	 * @see SQ_DB::$field_types
+	 * @see wp_set_wpdb_vars()
+	 *
+	 * @param string $table table name
+	 * @param array $data Data to insert (in column => value pairs). Both $data columns and $data values should be "raw" (neither should be SQL escaped).
+	 * @param array|string $format Optional. An array of formats to be mapped to each of the value in $data. If string, that format will be used for all of the values in $data.
+	 * 	A format is one of '%d', '%f', '%s' (integer, float, string). If omitted, all values in $data will be treated as strings unless otherwise specified in wpdb::$field_types.
+	 * @return int|false The number of rows affected, or false on error.
+	 */
+	function replace( $table, $data, $format = null ) {
+		return $this->_insert_replace_helper( $table, $data, $format, 'REPLACE' );
+	}
+	
+	/**
+	 * Helper function for insert and replace.
+	 *
+	 * Runs an insert or replace query based on $type argument.
+	 *
+	 * @access private
+	 * @see SQ_DB::prepare()
+	 * @see SQ_DB::$field_types
+	 * @see wp_set_wpdb_vars()
+	 *
+	 * @param string $table table name
+	 * @param array $data Data to insert (in column => value pairs).  Both $data columns and $data values should be "raw" (neither should be SQL escaped).
+	 * @param array|string $format Optional. An array of formats to be mapped to each of the value in $data. If string, that format will be used for all of the values in $data.
+	 * 	A format is one of '%d', '%f', '%s' (integer, float, string). If omitted, all values in $data will be treated as strings unless otherwise specified in wpdb::$field_types.
+	 * @param string $type Optional. What type of operation is this? INSERT or REPLACE. Defaults to INSERT.
+	 * @return int|false The number of rows affected, or false on error.
+	 */
+	private function _insert_replace_helper( $table, $data, $format = null, $type = 'INSERT' ) {
+		if ( ! in_array( strtoupper( $type ), array( 'REPLACE', 'INSERT' ) ) )
+			return false;
+		$formats = $format = (array) $format;
+		$fields = array_keys( $data );
+		$formatted_fields = array();
+		foreach ( $fields as $field ) {
+			if ( !empty( $format ) )
+				$form = ( $form = array_shift( $formats ) ) ? $form : $format[0];
+			elseif ( isset( $this->field_types[$field] ) )
+			$form = $this->field_types[$field];
+			else
+				$form = '%s';
+			$formatted_fields[] = $form;
+		}
+		$sql = "{$type} INTO `$table` (`" . implode( '`,`', $fields ) . "`) VALUES ('" . implode( "','", $formatted_fields ) . "')";
+		return $this->query( $this->prepare( $sql, $data ) );
+	}
+	
+	/**
 	 * Prepares a SQL query for safe execution. Uses sprintf()-like syntax.
 	 *
 	 * The following directives can be used in the query format string:
@@ -489,6 +569,42 @@ class SQ_DB{
 	 */
 	function escape_by_ref( &$string ) {
 		$string = $this->_real_escape( $string );
+	}
+	
+	/**
+	 * Weak escape, using addslashes()
+	 *
+	 * @see addslashes()
+	 * @access private
+	 *
+	 * @param string $string
+	 * @return string
+	 */
+	private function _weak_escape( $string ) {
+		return addslashes( $string );
+	}
+	
+	/**
+	 * Escapes content for insertion into the database using addslashes(), for security.
+	 *
+	 * Works on arrays.
+	 *
+	 * @param string|array $data to escape
+	 * @return string|array escaped as query safe string
+	 */
+	function escape( $data ) {
+		if ( is_array( $data ) ) {
+			foreach ( (array) $data as $k => $v ) {
+				if ( is_array( $v ) )
+					$data[$k] = $this->escape( $v );
+				else
+					$data[$k] = $this->_weak_escape( $v );
+			}
+		} else {
+			$data = $this->_weak_escape( $data );
+		}
+	
+		return $data;
 	}
 	
 	/**
