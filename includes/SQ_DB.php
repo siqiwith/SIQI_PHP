@@ -120,8 +120,12 @@ class SQ_DB{
 		$this->dbpassword = $dbpassword;
 		$this->dbname = $dbname;
 		$this->dbhost = $dbhost;
-
-		$this->db_connect();
+		
+		try{
+			$this->db_connect();
+		}catch(SQ_Exception $e){
+			print_error($e);
+		}
 	}
 	
 	/**
@@ -138,7 +142,7 @@ class SQ_DB{
 	 *
 	 * @return null
 	 */
-	function db_connect() {
+	function db_connect(){
 		if(SQ_DEBUG){
 			$this->dbh = mysql_connect($this->dbhost, $this->dbuser, $this->dbpassword, true);
 		}else{
@@ -150,6 +154,7 @@ class SQ_DB{
 			throw new SQ_Exception($error_message, SQ_DB_CONN_ERROR_CODE);
 		}
 		$this->ready = true;
+		
 		try{
 			$this->select($this->dbname, $this->dbh);
 		}catch(SQ_Exception $e){
@@ -185,9 +190,10 @@ class SQ_DB{
 	 * @return int|false Number of rows affected/selected or false on error
 	 */
 	function query($query){
-		if(!$this->ready)
+		if(!$this->ready){
 			return false;
-	
+		}
+		
 		$return_val = 0;
 		$this->flush();
 	
@@ -243,7 +249,7 @@ class SQ_DB{
 			$this->num_rows = $num_rows;
 			$return_val = $num_rows;
 		}
-	
+
 		return $return_val;
 	}
 	
@@ -423,23 +429,14 @@ class SQ_DB{
 	/**
 	 * Escapes content by reference for insertion into the database, for security
 	 *
-	 * @uses SQ_DB::_real_escape()
 	 * @param string $string to escape
 	 * @return void
 	 */
-	function escape_by_ref( &$string ){
-		$string = $this->_real_escape($string);
+	function escape_by_ref(&$string){
+		$string = $this->escape($string);
 	}
 	
 	/**
-	 * Weak escape, using addslashes()
-	 *
-	 * @param string $string
-	 * @return string
-	 */
-	private function _weak_escape($string){
-		return addslashes($string);
-	}
 	
 	/**
 	 * Escapes content for insertion into the database using addslashes(), for security.
@@ -455,32 +452,14 @@ class SQ_DB{
 				if (is_array($v))
 					$data[$k] = $this->escape($v);
 				else
-					$data[$k] = $this->_weak_escape($v);
+					$data[$k] = mysql_escape_string($v);
 			}
 		} else {
-			$data = $this->_weak_escape($data);
+			$data = mysql_escape_string($data);
 		}
 
 		return $data;
 	}
-	
-	/**
-	 * Real escape, using mysql_real_escape_string() or addslashes()
-	 *
-	 * @see mysql_real_escape_string()
-	 * @see addslashes()
-	 * @access private
-	 *
-	 * @param  string $string to escape
-	 * @return string escaped
-	 */
-	private function _real_escape($string){
-		if ($this->dbh)
-			return mysql_real_escape_string($string, $this->dbh);
-		else
-			return addslashes($string);
-	}
-	
 	
 	/**
 	 * Kill cached query results.
